@@ -1,3 +1,4 @@
+import time
 import tqdm
 import torch
 import torch.nn as nn
@@ -47,7 +48,10 @@ class Trainer(object):
         train_dataset, eval_dataset = self.spec.prepare_datasets()
 
         # Construct a model and load its pretrained weights.
-        model = self.spec.construct_model().cuda()
+        if self.config.gpus:
+            model = self.spec.construct_model().cuda()
+        else:
+            model = self.spec.construct_model()
         if from_pretrained:
             ckpt = torch.load(from_pretrained, map_location='cuda')
             model.load_state_dict(ckpt['model'])
@@ -92,20 +96,10 @@ class Trainer(object):
             del ckpt
             torch.cuda.empty_cache()
 
-        if rank == 0:
-            # Create tqdm iterator in master process to show the progress of
-            # training.
-            training_iters = tqdm.tqdm(
-                range(start_step + 1, self.config.total_steps),
-                total=self.config.total_steps,
-                desc=self.config.description,
-                dynamic_ncols=True)
-            training_iters.update(start_step + 1)
-        else:
-            # In other processes, use simple iterator rather than tqdm one.
-            training_iters = range(start_step + 1, self.config.total_steps)
+        training_iters = range(start_step + 1, self.config.total_steps)
 
         for step in training_iters:
+            start_time = time.time()
             # Clear CUDA cache which is used for training.
             torch.cuda.empty_cache()
 
@@ -123,8 +117,8 @@ class Trainer(object):
                 recorder.stamp(step)
 
                 if rank == 0:
-                    training_iters.set_postfix_str(
-                        recorder.format(self.config.log_format))
+                    end_time = time.time() - start_time
+                    print(f"iteration {step} took {end_time:.3f}s", recorder.format(self.config.log_format))
 
             # Save training states to checkpoint file.
             if rank == 0 and (step + 1) % self.config.save_steps == 0:
@@ -206,7 +200,10 @@ class Trainer(object):
         else:
             data = dataset.fetch(self.config.batch_train)
 
-        return {k: v.cuda() for k, v in data.items()}
+        if self.config.gpus:
+            return {k: v.cuda() for k, v in data.items()}
+        else:
+            return {k: v for k, v in data.items()}
 
     def _to_value(self, tensor: torch.Tensor) -> float:
         if self.config.distributed:
