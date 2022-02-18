@@ -1,4 +1,4 @@
-import regex as re
+import re
 from gpt2.data import Vocab
 from typing import List
 
@@ -35,7 +35,7 @@ class Tokenizer(object):
 
     def _normalize(self, text: str) -> List[str]:
         # Normalize whitespace characters and remove control characters.
-        text = ' '.join(re.sub('[\x00\uFFFD\\p{C}]', '', t)
+        text = ' '.join(re.sub(r'[\x00\uFFFD\\p{C}]', '', t)
                         for t in text.split())
 
         # Insert whitespaces between chinese characters.
@@ -47,7 +47,7 @@ class Tokenizer(object):
                 normalized.append(t)
             else:
                 # Prevent from treating tokens with punctuations.
-                normalized += re.split(f'([{_PUNCTUATION_RANGE}])', t.lower())
+                normalized += re.split(r'([\\p{P}\x21-\x2f\x3a-\x40\x5b-\x60\x7b-\x7e])', t.lower())
         return ' '.join(normalized).split()
 
     def _tokenize(self, text: str) -> List[str]:
